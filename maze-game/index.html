@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Heuristic Maze Duck Game</title>
+<style>
+  *{box-sizing:border-box} body{margin:0;font-family:Verdana,Arial,sans-serif;background:#83c6d5;min-height:100vh;display:grid;place-items:center;color:#111} 
+  .screen{width:min(96vw,920px)}
+  #startScreen{height:min(92vh,690px);background:linear-gradient(#80c9d9,#61b7ca);border:5px solid #172345;border-radius:12px;display:grid;place-items:center;text-align:center;box-shadow:0 18px 35px #0004}
+  .startBox{background:#f6fbffdd;border:4px solid #172345;border-radius:18px;padding:40px 34px;max-width:560px}
+  h1{font-size:44px;margin:0 0 10px;color:#172345}.startBox p{font-size:18px;line-height:1.5}.primary{font-size:24px;font-weight:800;padding:15px 34px;border:4px solid #172345;border-radius:14px;background:#ffd51b;cursor:pointer;box-shadow:0 6px 0 #172345}.primary:active{transform:translateY(4px);box-shadow:0 2px 0 #172345}
+  #gameScreen{display:none}.top{display:flex;justify-content:space-between;gap:10px;align-items:center;background:#eefaff;border:4px solid #172345;border-bottom:0;border-radius:12px 12px 0 0;padding:10px 14px}.top h2{margin:0}.stats{font-weight:700;display:flex;gap:16px;flex-wrap:wrap}
+  .boardWrap{background:#4e5a8f;border:5px solid #172345;border-radius:0 0 12px 12px;padding:10px;position:relative}canvas{width:100%;height:auto;display:block;background:#6ec2d2;border:3px solid #172345}.controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}.controls button{font-size:16px;font-weight:700;padding:10px 15px;border:3px solid #172345;border-radius:10px;background:#ffd51b;cursor:pointer}.controls button:disabled{opacity:.45;cursor:not-allowed}.msg{background:#eefaff;border:3px solid #172345;border-radius:10px;margin:10px 0 0;padding:10px;font-weight:700}
+  .modal{display:none;position:fixed;inset:0;background:#0008;place-items:center;z-index:5}.modalBox{width:min(90vw,430px);text-align:center;background:#f7fcff;border:5px solid #172345;border-radius:20px;padding:28px;box-shadow:0 18px 40px #0008}.modalBox h2{font-size:38px;margin:0 0 8px}.score{font-size:22px;font-weight:800;margin:15px 0}.small{font-size:14px;color:#333}.row{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}.secondary{font-size:18px;font-weight:800;padding:12px 18px;border:3px solid #172345;border-radius:12px;background:#70c6d7;cursor:pointer}
+</style>
+</head>
+<body>
+<section id="startScreen" class="screen">
+  <div class="startBox">
+    <h1>Duck Maze Game</h1>
+    <p>Find shortest path to help the duck reach the golden star.</p>
+    <button id="openGame" class="primary">▶ Start Game</button>
+  </div>
+</section>
+
+<main id="gameScreen" class="screen">
+  <div class="top"><h2>Find Star</h2><div class="stats"><span id="moves">Moves: 0</span><span id="shortest">Shortest: --</span><span id="scoreTxt">Score: 0</span></div></div>
+  <div class="boardWrap">
+    <canvas id="game" width="780" height="585"></canvas>
+    <div class="controls">
+      <button id="newBtn">New Goal</button><button id="doneBtn">Done</button><button id="pathBtn">Give Up</button><button id="homeBtn">Home</button>
+    </div>
+    <div id="msg" class="msg">Developed by Sadaf Bibi, Student of BS Artificial Intelligence.</div>
+  </div>
+</main>
+
+<div id="modal" class="modal"><div class="modalBox"><h2 id="resultTitle">You Win!</h2><p id="resultText"></p><div id="resultScore" class="score"></div><p class="small" id="algoText"></p><div class="row"><button id="againBtn" class="primary">Play Again</button><button id="closeBtn" class="secondary">Close</button></div></div></div>
+
+<script>
+const canvas=document.getElementById('game'),ctx=canvas.getContext('2d');
+const W=26,H=19,T=30;
+const grid=[
+"##########################",
+"#........#.........#.....#",
+"#.###.##.#.#####.#.###.#.#",
+"#.#...#..#.....#.#...#.#.#",
+"#.#.###.#####.#.###.#.#.#",
+"#...#.......#.#...#.#...#",
+"###.#.#######.###.#.###.#",
+"#...#.#...........#.#...#",
+"#.###.#.###.#######.#.###",
+"#.#...#.#.....#.....#...#",
+"#.#.###.#.###.#.#####.#.#",
+"#.#...#.#...#.#.....#.#.#",
+"#.###.#.###.#.#####.#.#.#",
+"#...#.#.....#.....#...#.#",
+"###.#.#######.###.#####.#",
+"#...#.........#.#.......#",
+"#.#############.#.#####.#",
+"#.......................#",
+"##########################"].map(r=>r.split(''));
+let start={x:2,y:2}, duck={...start}, goal={x:20,y:16}, moves=0, path=[], gameOn=false, finished=false, score=0;
+const openTiles=[]; for(let y=0;y<H;y++)for(let x=0;x<W;x++)if(grid[y][x]==='.')openTiles.push({x,y});
+function h(a,b){return Math.abs(a.x-b.x)+Math.abs(a.y-b.y)}
+function key(p){return p.x+','+p.y} function free(x,y){return grid[y]&&grid[y][x]==='.'}
+function astar(s,g){let open=[{...s,g:0,f:h(s,g)}],came={},cost={[key(s)]:0};while(open.length){open.sort((a,b)=>a.f-b.f);let cur=open.shift();if(cur.x===g.x&&cur.y===g.y){let out=[g],k=key(g);while(came[k]){out.unshift(came[k]);k=key(came[k])}return out}for(const d of [[1,0],[-1,0],[0,1],[0,-1]]){let nx=cur.x+d[0],ny=cur.y+d[1];if(!free(nx,ny))continue;let nk=nx+','+ny,nc=cost[key(cur)]+1;if(cost[nk]===undefined||nc<cost[nk]){cost[nk]=nc;came[nk]={x:cur.x,y:cur.y};open.push({x:nx,y:ny,g:nc,f:nc+h({x:nx,y:ny},g)})}}}return null}
+function newGame(){duck={...start};moves=0;finished=false;gameOn=true;let tries=0;do{goal=openTiles[Math.floor(Math.random()*openTiles.length)];path=astar(start,goal);tries++}while((!path||path.length<10||key(goal)===key(start))&&tries<500);update();draw();msg('Use Arrow Keys / WASD. Reach the golden star using the shortest path to win.');}
+function update(){document.getElementById('moves').textContent='Moves: '+moves;document.getElementById('shortest').textContent='Shortest: '+(path?path.length-1:'Unreachable');score=Math.max(0,1000-(moves*25)-Math.max(0,(moves-(path?path.length-1:0))*40));document.getElementById('scoreTxt').textContent='Score: '+score}
+function draw(show=false){ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='#73c8d7';ctx.fillRect(0,0,canvas.width,canvas.height);for(let y=0;y<H;y++)for(let x=0;x<W;x++){if(grid[y][x]==='#'){ctx.fillStyle='#4c5790';ctx.fillRect(x*T,y*T,T,T);ctx.strokeStyle='#14203d';ctx.lineWidth=2;ctx.strokeRect(x*T,y*T,T,T)}else{ctx.fillStyle='#79cfdb';ctx.fillRect(x*T,y*T,T,T);}}if(show&&path){ctx.fillStyle='rgba(255,230,0,.55)';path.forEach(p=>ctx.fillRect(p.x*T+8,p.y*T+8,14,14))}drawGoal(goal.x*T+15,goal.y*T+15);drawDuck(duck.x*T+15,duck.y*T+15)}
+function drawGoal(x,y){
+  // Attractive golden star goal
+  ctx.save();
+  ctx.translate(x,y);
+  ctx.shadowColor='rgba(255,220,0,.7)';
+  ctx.shadowBlur=12;
+  ctx.fillStyle='#ffd51b';
+  ctx.strokeStyle='#172345';
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  const spikes=5, outer=15, inner=7;
+  for(let i=0;i<spikes*2;i++){
+    const r=(i%2===0)?outer:inner;
+    const a=(-Math.PI/2)+(i*Math.PI/spikes);
+    const px=Math.cos(a)*r, py=Math.sin(a)*r;
+    if(i===0)ctx.moveTo(px,py); else ctx.lineTo(px,py);
+  }
+  ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='#fff8a8';
+  ctx.beginPath();ctx.arc(-4,-5,3,0,Math.PI*2);ctx.fill();
+  ctx.restore();
+}
+function drawDuck(x,y){ctx.fillStyle='#ffe21a';ctx.strokeStyle='#172345';ctx.lineWidth=2;ctx.beginPath();ctx.arc(x,y,10,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.beginPath();ctx.arc(x+8,y-12,7,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#ff9416';ctx.beginPath();ctx.moveTo(x+14,y-12);ctx.lineTo(x+25,y-15);ctx.lineTo(x+16,y-7);ctx.closePath();ctx.fill();ctx.stroke();ctx.fillStyle='#111';ctx.beginPath();ctx.arc(x+10,y-14,1.5,0,Math.PI*2);ctx.fill();ctx.strokeStyle='#172345';ctx.beginPath();ctx.moveTo(x-2,y+10);ctx.lineTo(x-2,y+18);ctx.moveTo(x+6,y+9);ctx.lineTo(x+8,y+18);ctx.stroke()}
+function move(dx,dy){if(!gameOn||finished)return;let nx=duck.x+dx,ny=duck.y+dy;if(free(nx,ny)){duck={x:nx,y:ny};moves++;update();draw();if(key(duck)===key(goal))checkResult()}else msg('Wall hit! Find another way.')}
+function checkResult(){
+  const optimal=path?path.length-1:null;
+  if(optimal===null){end(false,'Goal is unreachable. A* could not find a path.');return;}
+  if(moves===optimal){end(true,'Perfect! You used the exact shortest path.');}
+  else{
+    finished=true;gameOn=false;
+    draw(true);
+    msg('Long path selected. Yellow marks show the shortest path. Result popup will appear now.');
+    setTimeout(()=>end(false,'You reached the goal, but your path was long.'),900);
+  }
+}
+function end(win,customText=''){
+  finished=true;gameOn=false;
+  draw(true);
+  let optimal=path?path.length-1:'Unreachable';
+  const finalScore=win?Math.max(0,1000-(moves*25)):0;
+  document.getElementById('resultTitle').textContent=win?'🎉 You Win!':'❌ You Lose!';
+  document.getElementById('resultText').textContent=customText || (win?'Perfect shortest path!':'You did not complete the shortest path.');
+  document.getElementById('resultScore').textContent='Score: '+finalScore+' / 1000';
+  document.getElementById('algoText').textContent='A* + Manhattan heuristic shortest path: '+optimal+' moves | Your moves: '+moves;
+  document.getElementById('modal').style.display='grid';
+}
+function msg(t){document.getElementById('msg').textContent=t}
+document.getElementById('openGame').onclick=()=>{document.getElementById('startScreen').style.display='none';document.getElementById('gameScreen').style.display='block';newGame()};
+document.getElementById('newBtn').onclick=newGame;document.getElementById('doneBtn').onclick=()=>{if(key(duck)===key(goal))checkResult();else end(false,'You clicked Done before reaching the goal.');};document.getElementById('pathBtn').onclick=()=>draw(true);document.getElementById('homeBtn').onclick=()=>{document.getElementById('gameScreen').style.display='none';document.getElementById('startScreen').style.display='grid'};document.getElementById('againBtn').onclick=()=>{document.getElementById('modal').style.display='none';newGame()};document.getElementById('closeBtn').onclick=()=>document.getElementById('modal').style.display='none';
+window.addEventListener('keydown',e=>{const k=e.key.toLowerCase();if(['arrowup','w'].includes(k))move(0,-1);if(['arrowdown','s'].includes(k))move(0,1);if(['arrowleft','a'].includes(k))move(-1,0);if(['arrowright','d'].includes(k))move(1,0)});
+canvas.addEventListener('click',e=>{let r=canvas.getBoundingClientRect(),x=Math.floor((e.clientX-r.left)/(r.width/W)),y=Math.floor((e.clientY-r.top)/(r.height/H));if(Math.abs(x-duck.x)+Math.abs(y-duck.y)===1)move(x-duck.x,y-duck.y)});
+</script>
+</body>
+</html>
